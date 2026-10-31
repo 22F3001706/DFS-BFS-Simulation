@@ -1,0 +1,894 @@
+<title>Search Stepper</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@600;700&family=Instrument+Sans:wght@400;500;600&family=JetBrains+Mono:wght@400;600&display=swap">
+<style>
+/* Layout concept: a drafting-table workbench. Graph on the left as the drawing,
+   pseudocode and the OPEN / CLOSED lists on the right as the instruments, one
+   floating transport bar pinned to the bottom edge. */
+:root{
+  --paper:#EDF0F4;
+  --surface:#FAFBFC;
+  --ink:#142032;
+  --ink-2:#506074;
+  --line:#CAD2DC;
+  --edge:#9FACBB;
+  --dot:#D3DAE3;
+  --cur:#3947C9;
+  --cur-soft:#DFE3FA;
+  --on-cur:#FFFFFF;
+  --open:#D98A12;
+  --open-soft:#FBEBCB;
+  --on-open:#1A1200;
+  --done:#14877A;
+  --done-soft:#D3EEE9;
+  --bad:#C93C3C;
+  --bad-soft:#F7DADA;
+  --shadow:rgba(10,20,40,.16);
+  --font-display:'Bricolage Grotesque','Segoe UI',system-ui,sans-serif;
+  --font-body:'Instrument Sans',system-ui,-apple-system,'Segoe UI',sans-serif;
+  --font-mono:'JetBrains Mono',ui-monospace,'SF Mono',Menlo,Consolas,monospace;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --paper:#0D1520;--surface:#142030;--ink:#E7EDF4;--ink-2:#9DAEC1;--line:#2B3B50;--edge:#46586F;--dot:#1F2D40;
+    --cur:#8E9BFF;--cur-soft:#232C59;--on-cur:#0D1520;
+    --open:#F0B249;--open-soft:#43330F;
+    --done:#46C9B4;--done-soft:#123A36;
+    --bad:#FF8585;--bad-soft:#4A2020;--shadow:rgba(0,0,0,.5);
+    color-scheme:dark;
+  }
+}
+:root[data-theme="dark"]{
+  --paper:#0D1520;--surface:#142030;--ink:#E7EDF4;--ink-2:#9DAEC1;--line:#2B3B50;--edge:#46586F;--dot:#1F2D40;
+  --cur:#8E9BFF;--cur-soft:#232C59;--on-cur:#0D1520;
+  --open:#F0B249;--open-soft:#43330F;
+  --done:#46C9B4;--done-soft:#123A36;
+  --bad:#FF8585;--bad-soft:#4A2020;--shadow:rgba(0,0,0,.5);
+  color-scheme:dark;
+}
+*{box-sizing:border-box}
+html{background:var(--paper)}
+body{
+  margin:0;background:var(--paper);color:var(--ink);
+  font:15px/1.5 var(--font-body);
+  padding-block:20px 28px;
+  padding-left:max(16px,env(safe-area-inset-left,0px));
+  padding-right:max(16px,env(safe-area-inset-right,0px));
+}
+.wrap{max-width:1180px;margin:0 auto;display:flex;flex-direction:column;gap:18px}
+h1,h2,h3{margin:0;font-family:var(--font-display);text-wrap:balance}
+h1{font-size:clamp(28px,4.4vw,40px);line-height:1.05;letter-spacing:-.02em;font-weight:700}
+h2{font-size:16px;font-weight:600;letter-spacing:-.005em}
+h3{font-size:13px;font-weight:600;letter-spacing:.01em}
+p{margin:0}
+.lede{color:var(--ink-2);max-width:62ch;margin-top:8px}
+.eyebrow{font-size:11.5px;font-weight:600;letter-spacing:.09em;text-transform:uppercase;color:var(--ink-2)}
+.lbl{font-size:11.5px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-2)}
+.panel{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:14px;min-width:0}
+button,select,input{font:inherit;color:inherit}
+:focus-visible{outline:2px solid var(--cur);outline-offset:2px}
+
+/* library */
+.lib{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:10px;margin-top:8px}
+.card{text-align:left;background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:10px 12px;cursor:pointer;display:flex;flex-direction:column;gap:2px;min-width:0}
+.card b{font-family:var(--font-display);font-weight:600;font-size:15px}
+.card span{font-size:13px;color:var(--ink-2)}
+.card:hover{border-color:var(--edge)}
+.card[aria-pressed="true"]{border-color:var(--cur);background:var(--cur-soft);box-shadow:0 0 0 1px var(--cur)}
+
+/* controls */
+.controls{display:flex;flex-wrap:wrap;gap:14px 22px;align-items:flex-end}
+.field{display:flex;flex-direction:column;gap:5px;min-width:0}
+.row{display:flex;gap:8px;align-items:center}
+.seg{display:inline-flex;border:1px solid var(--line);border-radius:8px;overflow:hidden;background:var(--surface)}
+.seg button{border:0;background:transparent;padding:7px 14px;font-weight:600;cursor:pointer}
+.seg button+button{border-left:1px solid var(--line)}
+.seg button[aria-pressed="true"]{background:var(--cur);color:var(--on-cur)}
+select,input[type="text"]{background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:7px 10px;min-width:0}
+select{cursor:pointer}
+.switch{display:flex;align-items:center;gap:8px;cursor:pointer;padding-bottom:6px}
+.switch input{width:18px;height:18px;accent-color:var(--cur);margin:0}
+.btn{border:1px solid var(--line);background:var(--surface);border-radius:8px;padding:8px 14px;font-weight:600;cursor:pointer}
+.btn:hover:not(:disabled){background:var(--paper)}
+.btn.primary{background:var(--cur);border-color:var(--cur);color:var(--on-cur)}
+.btn.primary:hover:not(:disabled){background:var(--cur);filter:brightness(1.08)}
+.btn:disabled{opacity:.45;cursor:default}
+.warn{color:var(--bad);font-size:13.5px;flex-basis:100%}
+
+/* stage */
+.stage{display:grid;grid-template-columns:minmax(0,1.25fr) minmax(0,1fr);gap:16px;align-items:start}
+.col{display:flex;flex-direction:column;gap:16px;min-width:0}
+@media (max-width:860px){.stage{grid-template-columns:minmax(0,1fr)}}
+.graph{background-image:radial-gradient(var(--dot) 1.1px,transparent 1.4px);background-size:18px 18px;padding:8px}
+svg{display:block;width:100%;height:auto;max-height:min(74vh,640px)}
+.edge{stroke:var(--edge);stroke-width:2.2;stroke-linecap:round}
+.edge.hot{stroke:var(--cur);stroke-width:4.5}
+.edge.path{stroke:var(--done);stroke-width:5.5}
+.node{outline:none}
+.node .halo{fill:none;stroke:var(--cur);stroke-width:2;opacity:0}
+.node .body{fill:var(--surface);stroke:var(--ink-2);stroke-width:2}
+.node .lt{fill:var(--ink);font:600 19px var(--font-display);text-anchor:middle}
+.node.visited .body{fill:var(--done-soft);stroke:var(--done)}
+.node.open .body{stroke:var(--open);stroke-width:4.5}
+.node.open:not(.visited) .body{fill:var(--open-soft)}
+.node.onpath .body{stroke:var(--done);stroke-width:5}
+.node.cur .body{fill:var(--cur);stroke:var(--cur)}
+.node.cur .lt{fill:var(--on-cur)}
+.node.cur .halo{opacity:.55}
+.node.skipped .body{stroke-dasharray:5 4;fill:var(--bad-soft);stroke:var(--bad)}
+.node.skipped .lt{fill:var(--ink)}
+.node.wrong .body{fill:var(--bad-soft);stroke:var(--bad);stroke-width:5}
+.node.pickable{cursor:pointer}
+.node.pickable:hover .body,.node.pickable:focus-visible .body{stroke:var(--cur);stroke-width:5}
+.node .tag{fill:var(--ink-2);font:600 9.5px var(--font-body);letter-spacing:.08em;text-anchor:middle;paint-order:stroke;stroke:var(--surface);stroke-width:3px}
+.pb circle{fill:var(--open)}
+.pb text,.cb text{font:700 11px var(--font-mono);text-anchor:middle}
+.pb text{fill:var(--on-open)}
+.cb circle{fill:var(--ink)}
+.cb text{fill:var(--surface)}
+.pb:not(.on),.cb:not(.on){display:none}
+.legend{display:flex;flex-wrap:wrap;gap:6px 16px;margin-top:6px;font-size:12.5px;color:var(--ink-2)}
+.legend i{display:inline-block;width:12px;height:12px;border-radius:50%;margin-right:6px;vertical-align:-1px;border:2px solid var(--ink-2);background:var(--surface)}
+.legend .l-cur{background:var(--cur);border-color:var(--cur)}
+.legend .l-open{background:var(--open-soft);border-color:var(--open)}
+.legend .l-done{background:var(--done-soft);border-color:var(--done)}
+
+/* note + prompt */
+.note-head{display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:6px}
+.mono{font-family:var(--font-mono);font-size:12.5px;color:var(--ink-2)}
+#noteText{min-height:3em}
+.prompt{margin-top:10px;background:var(--cur-soft);border-radius:8px;padding:10px 12px;display:flex;flex-direction:column;gap:8px}
+.prompt .q{font-weight:600}
+.fb{margin-top:8px;font-weight:500}
+.fb.ok{color:var(--done)}
+.fb.bad{color:var(--bad)}
+
+/* code */
+.code{list-style:none;margin:10px 0 0;padding:0;counter-reset:ln;font:500 13.5px/1.95 var(--font-mono)}
+.code li{counter-increment:ln;display:flex;gap:10px;padding:0 10px;border-radius:6px;white-space:pre;overflow-x:auto}
+.code li::before{content:counter(ln);width:1.3em;text-align:right;color:var(--ink-2);opacity:.75;flex:none}
+.code li span{padding-left:calc(var(--lv) * 1.7em)}
+.code li.on{background:var(--cur-soft);box-shadow:inset 3px 0 0 var(--cur)}
+.sub{font-size:13px;color:var(--ink-2)}
+
+/* lists */
+.lists{display:flex;flex-direction:column;gap:14px}
+.box{display:flex;flex-direction:column;gap:6px}
+.box-head{display:flex;justify-content:space-between;align-items:baseline;gap:8px;flex-wrap:wrap}
+.chips{display:flex;flex-wrap:wrap;gap:6px;align-items:center;min-height:36px}
+.chip{display:inline-flex;align-items:center;justify-content:center;min-width:34px;height:34px;padding:0 8px;border:1.5px solid var(--line);border-radius:8px;font:600 15px var(--font-mono);background:var(--surface)}
+.chip.next{border-color:var(--cur);box-shadow:0 0 0 2px var(--cur-soft)}
+.chip.new{background:var(--open-soft);border-color:var(--open);animation:pop .22s ease-out}
+.chip.done{background:var(--done-soft);border-color:var(--done)}
+.chip.cur{background:var(--cur);border-color:var(--cur);color:var(--on-cur)}
+.chip.ok{background:var(--done-soft);border-color:var(--done)}
+.chip.bad{background:var(--bad-soft);border-color:var(--bad)}
+.chip.dim{opacity:.5}
+.chip.more{border-style:dashed;color:var(--ink-2);font-weight:400}
+.chip.pick{cursor:pointer}
+.chip.pick:hover{border-color:var(--cur)}
+.chip.wrong{background:var(--bad-soft);border-color:var(--bad)}
+.empty{color:var(--ink-2);font-size:13.5px}
+@keyframes pop{from{transform:scale(.7);opacity:.2}to{transform:scale(1);opacity:1}}
+
+/* checker */
+.chk-row{display:flex;flex-wrap:wrap;gap:12px 20px;align-items:flex-end;margin-top:12px}
+.chk-row .grow{flex:1 1 260px}
+.chk-row input[type="text"]{width:100%;font:600 16px var(--font-mono);letter-spacing:.06em;text-transform:uppercase}
+.verdict{margin-top:12px;border:1px solid var(--line);border-radius:8px;padding:10px 12px;display:flex;flex-direction:column;gap:8px}
+.verdict.ok{background:var(--done-soft);border-color:var(--done)}
+.verdict.no{background:var(--bad-soft);border-color:var(--bad)}
+.verdict.unk{background:var(--open-soft);border-color:var(--open)}
+
+/* terms */
+details summary{cursor:pointer;font-family:var(--font-display);font-weight:600}
+dl{margin:10px 0 0;display:grid;grid-template-columns:max-content 1fr;gap:6px 16px}
+dt{font:600 13.5px var(--font-mono)}
+dd{margin:0;color:var(--ink-2)}
+@media (max-width:560px){dl{grid-template-columns:1fr}dd{margin-bottom:6px}}
+
+/* transport */
+.bar{position:sticky;bottom:max(10px,env(safe-area-inset-bottom,0px));z-index:5;display:flex;flex-wrap:wrap;gap:8px 10px;align-items:center;background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:10px 12px;box-shadow:0 6px 24px var(--shadow)}
+.bar .pos{margin-left:auto;font:600 13px var(--font-mono);color:var(--ink-2)}
+.bar label{display:flex;align-items:center;gap:6px;font-size:13px;color:var(--ink-2)}
+.keys{font-size:12.5px;color:var(--ink-2)}
+@media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+</style>
+
+<div class="wrap">
+  <header>
+    <h1>Search Stepper</h1>
+    <p class="lede">Run depth-first and breadth-first search one line at a time. Watch the OPEN and CLOSED lists change at the moment each line runs.</p>
+  </header>
+
+  <section aria-labelledby="libH">
+    <h2 class="eyebrow" id="libH">Library</h2>
+    <div class="lib" id="lib"></div>
+  </section>
+
+  <section class="panel controls" aria-label="Settings">
+    <div class="field"><span class="lbl">Algorithm</span>
+      <div class="seg" role="group" aria-label="Algorithm">
+        <button type="button" id="algoDfs" aria-pressed="true">DFS</button>
+        <button type="button" id="algoBfs" aria-pressed="false">BFS</button>
+      </div>
+    </div>
+    <label class="field"><span class="lbl">Start</span><select id="start"></select></label>
+    <label class="field"><span class="lbl">Goal</span><select id="goal"></select></label>
+    <div class="field"><label class="lbl" for="order">MoveGen order</label>
+      <div class="row">
+        <select id="order">
+          <option value="az">Alphabetical, A to Z</option>
+          <option value="za">Reverse, Z to A</option>
+          <option value="shuffle">Shuffled</option>
+        </select>
+        <button type="button" class="btn" id="reroll" hidden>Re-shuffle</button>
+      </div>
+    </div>
+    <label class="switch"><input type="checkbox" id="closedOn"><span>Keep a CLOSED list</span></label>
+    <label class="switch"><input type="checkbox" id="predictOn"><span>Predict mode</span></label>
+    <p class="warn" id="warn" hidden></p>
+  </section>
+
+  <div class="stage">
+    <div class="col">
+      <div class="panel graph">
+        <svg id="svg" role="group" aria-label="Graph"></svg>
+        <div class="legend"><span><i class="l-cur"></i>current node N</span><span><i class="l-open"></i>waiting in OPEN</span><span><i class="l-done"></i>visited</span></div>
+      </div>
+      <div class="panel" aria-live="polite">
+        <div class="note-head"><span class="mono" id="stepLbl"></span><span class="mono" id="score"></span></div>
+        <p id="noteText"></p>
+        <div class="prompt" id="prompt" hidden>
+          <p class="q" id="pQ"></p>
+          <div class="row"><span class="sub">MoveGen returns</span><div class="chips" id="pMG" style="min-height:0"></div></div>
+          <p class="sub">Click your answer on the graph or in OPEN. Next reveals it.</p>
+        </div>
+        <p class="fb" id="fb" hidden></p>
+      </div>
+    </div>
+    <div class="col">
+      <div class="panel">
+        <h2>Pseudocode</h2>
+        <p class="sub" id="codeSub"></p>
+        <ol class="code" id="code"></ol>
+      </div>
+      <div class="panel lists">
+        <div class="box"><div class="box-head"><h3>N, the current node</h3></div><div class="chips" id="curBox"></div></div>
+        <div class="box"><div class="box-head"><h3 id="openH">OPEN</h3><span class="sub" id="openKind"></span></div><div class="chips" id="open"></div></div>
+        <div class="box"><div class="box-head"><h3>CLOSED</h3></div><div class="chips" id="closed"></div></div>
+        <div class="box"><div class="box-head"><h3>Visit order</h3><span class="sub">the answer to questions like "which order does it visit"</span></div><div class="chips" id="visits"></div></div>
+      </div>
+    </div>
+  </div>
+
+  <section class="panel" aria-labelledby="chkH">
+    <h2 id="chkH">Could this be the visit order?</h2>
+    <p class="sub" style="margin-top:4px;max-width:70ch">Type the nodes a search visits, in order. The check uses the algorithm, start node and CLOSED setting above, and tries every MoveGen ordering that could exist.</p>
+    <div class="chk-row">
+      <label class="field grow"><span class="lbl">Visit order</span><input type="text" id="seq" autocomplete="off" autocapitalize="characters" spellcheck="false"></label>
+      <label class="switch"><input type="checkbox" id="afterStart" checked><span>Start node is already visited</span></label>
+    </div>
+    <div class="chk-row">
+      <div class="field"><span class="lbl">MoveGen behaviour</span>
+        <div class="seg" role="group" aria-label="MoveGen behaviour">
+          <button type="button" id="mgFixed" aria-pressed="true">Same order on every call</button>
+          <button type="button" id="mgFree" aria-pressed="false">Any order on each call</button>
+        </div>
+      </div>
+    </div>
+    <div class="verdict" id="verdict" aria-live="polite"></div>
+  </section>
+
+  <section class="panel">
+    <details>
+      <summary>Terms used on this page</summary>
+      <dl>
+        <dt>MoveGen(N)</dt><dd>Returns the neighbours of N as a list. The order of that list is up to the implementation, which is why exam questions say it is unknown.</dd>
+        <dt>OPEN</dt><dd>Nodes found but not yet visited. The algorithm takes its next node from here. DFS treats OPEN as a stack, so the newest node comes out first. BFS treats it as a queue, so the oldest comes out first.</dd>
+        <dt>CLOSED</dt><dd>Nodes already visited. Checking it before adding a node to OPEN stops the search from going back to the same node.</dd>
+        <dt>visit(N)</dt><dd>The moment a node is taken off OPEN and processed. The visit order is the sequence of these moments.</dd>
+        <dt>expand</dt><dd>Call MoveGen on the visited node and add its neighbours to OPEN.</dd>
+      </dl>
+    </details>
+  </section>
+
+  <div class="bar" role="group" aria-label="Playback">
+    <button type="button" class="btn" id="bReset">Reset</button>
+    <button type="button" class="btn" id="bBack">Back</button>
+    <button type="button" class="btn primary" id="bNext">Next</button>
+    <button type="button" class="btn" id="bPlay">Play</button>
+    <label>Speed
+      <select id="speed"><option value="1500">Slow</option><option value="800" selected>Normal</option><option value="300">Fast</option></select>
+    </label>
+    <span class="keys">Arrow keys step</span>
+    <span class="pos" id="pos"></span>
+  </div>
+</div>
+
+<script>
+/*LOGIC-START*/
+var SC = 0.5;
+var GRAPHS = {
+  tree7: {
+    r: 26, w: 700, h: 400,
+    pos: { A: [350, 60], B: [180, 190], C: [520, 190], D: [100, 330], E: [260, 330], F: [440, 330], G: [600, 330] },
+    edges: ['AB', 'AC', 'BD', 'BE', 'CF', 'CG']
+  },
+  exam: {
+    r: 22, w: 710, h: 704, scale: SC,
+    pos: {
+      D: [375, 85], A: [518, 72], B: [280, 195], E: [500, 323], C: [885, 140], F: [810, 372], G: [1110, 323],
+      H: [1272, 125], M: [1360, 270], N: [115, 497], J: [352, 587], I: [110, 650], K: [632, 607], L: [925, 560],
+      O: [452, 863], P: [763, 895], Q: [1005, 873], R: [1247, 940], T: [252, 1035], S: [444, 1082],
+      Y: [70, 1210], W: [931, 1100], X: [1114, 1277], Z: [962, 1350]
+    },
+    edges: ['EA', 'EB', 'ED', 'EK', 'FC', 'FG', 'FK', 'GH', 'GM', 'JN', 'JI', 'JK', 'KL', 'KO', 'KP', 'OT', 'OS', 'TY', 'PQ', 'PW', 'QR', 'WX', 'WZ']
+  },
+  tri: {
+    r: 26, w: 700, h: 400,
+    pos: { S: [90, 200], A: [250, 90], B: [250, 310], C: [430, 200], G: [610, 200] },
+    edges: ['SA', 'SB', 'AB', 'AC', 'BC', 'CG']
+  },
+  grid: {
+    r: 26, w: 700, h: 460,
+    pos: { A: [190, 90], B: [350, 90], C: [510, 90], D: [190, 230], E: [350, 230], F: [510, 230], G: [190, 370], H: [350, 370], I: [510, 370] },
+    edges: ['AB', 'BC', 'DE', 'EF', 'GH', 'HI', 'AD', 'DG', 'BE', 'EH', 'CF', 'FI']
+  },
+  diamond: {
+    r: 26, w: 700, h: 400,
+    pos: { S: [100, 200], A: [250, 80], C: [430, 80], G: [610, 200], B: [350, 330] },
+    edges: ['SA', 'AC', 'CG', 'SB', 'BG']
+  }
+};
+
+var SCENARIOS = [
+  { id: 'tree7', graph: 'tree7', name: 'Binary tree, 7 nodes', blurb: 'The cleanest place to see a stack and a queue behave differently.', algo: 'dfs', closed: true, order: 'az', start: 'A', goal: '', sample: 'C G F B D' },
+  { id: 'exam', graph: 'exam', name: 'Exam graph, 24 nodes', blurb: 'DFS from J with no CLOSED list, as in the practice question.', algo: 'dfs', closed: false, order: 'az', start: 'J', goal: '', sample: 'K E A E A' },
+  { id: 'tri', graph: 'tri', name: 'Triangle with a tail', blurb: 'Cycles are why a CLOSED list exists. Switch it off and watch.', algo: 'dfs', closed: true, order: 'az', start: 'S', goal: 'G', sample: 'B C G' },
+  { id: 'grid', graph: 'grid', name: 'Grid, 3 by 3', blurb: 'Many routes to the goal corner. Compare how DFS and BFS spread.', algo: 'bfs', closed: true, order: 'az', start: 'A', goal: 'I', sample: 'B D C E G' },
+  { id: 'diamond', graph: 'diamond', name: 'Short and long route', blurb: 'Change the MoveGen order and see which route DFS finds.', algo: 'dfs', closed: true, order: 'za', start: 'S', goal: 'G', sample: 'A C G' }
+];
+
+function buildGraphData(id) {
+  var d = GRAPHS[id], pos = {};
+  Object.keys(d.pos).forEach(function (k) {
+    var p = d.pos[k];
+    pos[k] = d.scale ? [Math.round(p[0] * d.scale), Math.round(p[1] * d.scale)] : [p[0], p[1]];
+  });
+  var nodes = Object.keys(pos).sort(), adj = {};
+  nodes.forEach(function (n) { adj[n] = []; });
+  d.edges.forEach(function (e) { adj[e[0]].push(e[1]); adj[e[1]].push(e[0]); });
+  nodes.forEach(function (n) { adj[n].sort(); });
+  return { id: id, r: d.r, w: d.w, h: d.h, pos: pos, nodes: nodes, adj: adj, edges: d.edges.map(function (e) { return [e[0], e[1]]; }) };
+}
+
+function rng(a) {
+  return function () {
+    a |= 0; a = a + 0x6D2B79F5 | 0;
+    var t = Math.imul(a ^ a >>> 15, 1 | a);
+    t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
+    return ((t ^ t >>> 14) >>> 0) / 4294967296;
+  };
+}
+function shuffle(arr, seed) {
+  var r = rng(seed);
+  for (var i = arr.length - 1; i > 0; i--) {
+    var j = Math.floor(r() * (i + 1)), t = arr[i]; arr[i] = arr[j]; arr[j] = t;
+  }
+  return arr;
+}
+/* MoveGen is a real function here: the same node always gets the same order. */
+function mgOrder(g, n, mode, seed) {
+  var b = g.adj[n].slice().sort();
+  if (mode === 'az') return b;
+  if (mode === 'za') return b.reverse();
+  return shuffle(b, seed * 131 + n.charCodeAt(0));
+}
+
+function pseudo(algo, closed, hasGoal, start) {
+  var dfs = algo === 'dfs', L = [];
+  L.push({ id: 'init', i: 0, t: closed ? 'OPEN ← [' + start + ']    CLOSED ← [ ]' : 'OPEN ← [' + start + ']' });
+  L.push({ id: 'while', i: 0, t: 'while OPEN is not empty:' });
+  L.push({ id: 'pop', i: 1, t: dfs ? 'N ← pop the top of OPEN' : 'N ← remove the front of OPEN' });
+  if (closed) L.push({ id: 'skip', i: 1, t: 'if N is in CLOSED: continue' });
+  L.push({ id: 'visit', i: 1, t: closed ? 'visit(N); put N in CLOSED' : 'visit(N)' });
+  if (hasGoal) L.push({ id: 'goal', i: 1, t: 'if N is the goal: stop' });
+  L.push({ id: 'for', i: 1, t: 'for each C in MoveGen(N):' });
+  if (closed) {
+    L.push({ id: 'check', i: 2, t: 'if C is not in CLOSED:' });
+    L.push({ id: 'add', i: 3, t: dfs ? 'push C on top of OPEN' : 'add C at the back of OPEN' });
+  } else {
+    L.push({ id: 'add', i: 2, t: dfs ? 'push C on top of OPEN' : 'add C at the back of OPEN' });
+  }
+  return L;
+}
+
+function simulate(g, o) {
+  var dfs = o.algo === 'dfs', cap = o.closed ? 3000 : 450;
+  var frames = [], open = [{ n: o.start, from: null, path: [o.start] }], closedL = [], visits = [];
+  function snap(type, lines, cur, note, extra) {
+    var f = {
+      type: type, lines: lines, cur: cur, note: note,
+      open: open.map(function (x) { return { n: x.n, from: x.from }; }),
+      closed: closedL.slice(), visits: visits.slice(), hot: [], added: [], mg: null, path: null
+    };
+    if (extra) for (var k in extra) f[k] = extra[k];
+    frames.push(f);
+  }
+  snap('init', ['init'], null, 'OPEN starts with the start node <b>' + o.start + '</b>. Nothing has been visited yet. Press Next to run the first line.');
+  var capped = false;
+  while (open.length) {
+    if (frames.length >= cap) { capped = true; break; }
+    var it = dfs ? open.pop() : open.shift(), n = it.n;
+    snap('pop', ['while', 'pop'], n,
+      dfs ? 'Pop the top of OPEN: <b>' + n + '</b>. The top is the node pushed most recently.'
+          : 'Remove the front of OPEN: <b>' + n + '</b>. It is the node that has waited longest.',
+      { hot: it.from ? [[it.from, n]] : [] });
+    if (o.closed && closedL.indexOf(n) >= 0) {
+      snap('skip', ['skip'], n, '<b>' + n + '</b> is already in CLOSED, so it is dropped without a visit.');
+      continue;
+    }
+    visits.push(n);
+    if (o.closed) closedL.push(n);
+    snap('visit', ['visit'], n, 'Visit <b>' + n + '</b>.' + (o.closed ? ' It goes into CLOSED so it is never expanded again.' : ' Nothing records that it was visited, so it can come back.'));
+    if (o.goal) {
+      if (n === o.goal) {
+        snap('found', ['goal'], n, '<b>' + n + '</b> is the goal. The route taken is ' + it.path.join(' → ') + ', ' + (it.path.length - 1) + ' edge' + (it.path.length === 2 ? '' : 's') + ' long. The search stops.', { path: it.path });
+        return frames;
+      }
+      snap('goal', ['goal'], n, '<b>' + n + '</b> is not the goal, so the search continues.');
+    }
+    var mg = mgOrder(g, n, o.order, o.seed);
+    var add = o.closed ? mg.filter(function (c) { return closedL.indexOf(c) < 0; }) : mg;
+    add.forEach(function (c) { open.push({ n: c, from: n, path: it.path.concat(c) }); });
+    var left = mg.filter(function (c) { return add.indexOf(c) < 0; });
+    var note = 'MoveGen(<b>' + n + '</b>) returns [' + mg.join(', ') + '].';
+    if (left.length) note += ' ' + left.join(', ') + (left.length > 1 ? ' are' : ' is') + ' already in CLOSED, so left out.';
+    if (add.length) note += dfs ? ' They are pushed in that order, so <b>' + add[add.length - 1] + '</b> ends up on top.' : ' They are added at the back in that order.';
+    else note += ' Nothing is added.';
+    snap('push', o.closed ? ['for', 'check', 'add'] : ['for', 'add'], n, note,
+      { hot: add.map(function (c) { return [n, c]; }), mg: mg, added: add.slice() });
+  }
+  if (capped) snap('capped', ['while'], null, 'Stopped after ' + frames.length + ' steps. Without a CLOSED list the search never reaches the end by itself, because every node adds its parent back to OPEN.');
+  else snap('done', ['while'], null, 'OPEN is empty, so the search ends.' + (o.goal ? ' The goal was not reached.' : ''));
+  return frames;
+}
+
+function permutations(arr) {
+  var out = [];
+  (function p(a, l) {
+    if (l === a.length) { out.push(a.slice()); return; }
+    for (var i = l; i < a.length; i++) {
+      var t = a[l]; a[l] = a[i]; a[i] = t;
+      p(a, l + 1);
+      t = a[l]; a[l] = a[i]; a[i] = t;
+    }
+  })(arr.slice(), 0);
+  return out;
+}
+
+/* Can some fixed MoveGen (one order per node, reused on every call) produce this visit order? */
+function feasibleFixed(g, algo, closed, start, target, budget) {
+  var calls = 0, cache = {};
+  function P(n) { return cache[n] || (cache[n] = permutations(g.adj[n])); }
+  function rec(open, cl, i, perms) {
+    if (++calls > budget) throw new Error('budget');
+    for (;;) {
+      if (!open.length) return false;
+      var n, rest;
+      if (algo === 'dfs') { n = open[open.length - 1]; rest = open.slice(0, -1); }
+      else { n = open[0]; rest = open.slice(1); }
+      open = rest;
+      if (closed && cl.has(n)) continue;
+      if (n !== target[i]) return false;
+      if (i === target.length - 1) return true;
+      var cl2 = cl;
+      if (closed) { cl2 = new Set(cl); cl2.add(n); }
+      var apply = function (p) { return open.concat(closed ? p.filter(function (c) { return !cl2.has(c); }) : p); };
+      if (perms[n]) return rec(apply(perms[n]), cl2, i + 1, perms);
+      var ps = P(n);
+      for (var k = 0; k < ps.length; k++) {
+        var np = {}; for (var key in perms) np[key] = perms[key];
+        np[n] = ps[k];
+        if (rec(apply(ps[k]), cl2, i + 1, np)) return true;
+      }
+      return false;
+    }
+  }
+  return rec([start], new Set(), 0, {});
+}
+
+/* Can some MoveGen, free to answer differently each time, produce this visit order? */
+function feasibleFree(g, algo, closed, start, target, budget) {
+  var calls = 0;
+  function rec(groups, cl, i) {
+    if (++calls > budget) throw new Error('budget');
+    if (!groups.length) return false;
+    var gi = algo === 'dfs' ? groups.length - 1 : 0, grp = groups[gi], seen = {};
+    for (var j = 0; j < grp.length; j++) {
+      var n = grp[j];
+      if (seen[n]) continue;
+      seen[n] = 1;
+      var rest = grp.slice(0, j).concat(grp.slice(j + 1)), ng = groups.slice();
+      if (rest.length) ng[gi] = rest; else ng.splice(gi, 1);
+      if (closed && cl.has(n)) { if (rec(ng, cl, i)) return true; continue; }
+      if (n !== target[i]) continue;
+      if (i === target.length - 1) return true;
+      var cl2 = cl;
+      if (closed) { cl2 = new Set(cl); cl2.add(n); }
+      var nb = closed ? g.adj[n].filter(function (c) { return !cl2.has(c); }) : g.adj[n].slice();
+      if (nb.length) ng.push(nb);
+      if (rec(ng, cl2, i + 1)) return true;
+    }
+    return false;
+  }
+  return rec([[start]], new Set(), 0);
+}
+
+function feasible(g, algo, closed, start, target, fixed) {
+  return fixed ? feasibleFixed(g, algo, closed, start, target, 600000) : feasibleFree(g, algo, closed, start, target, 600000);
+}
+
+/* Returns { k, status } where k is the length of the longest feasible prefix. */
+function longestPrefix(g, algo, closed, start, target, fixed) {
+  var k = 0;
+  try {
+    for (k = 1; k <= target.length; k++) {
+      if (!feasible(g, algo, closed, start, target.slice(0, k), fixed)) return { k: k - 1, status: 'no' };
+    }
+    return { k: target.length, status: 'ok' };
+  } catch (e) {
+    return { k: k - 1, status: 'unknown' };
+  }
+}
+/*LOGIC-END*/
+
+(function () {
+  'use strict';
+  var NS = 'http://www.w3.org/2000/svg';
+  function el(id) { return document.getElementById(id); }
+  var state = {
+    scn: null, g: null, algo: 'dfs', closed: true, order: 'az', seed: 7, start: 'A', goal: '',
+    predict: false, frames: [], idx: 0, answered: new Set(), missed: new Set(),
+    score: { right: 0, total: 0 }, fb: null, play: null, fixed: true
+  };
+  var codeEls = {}, edgeEls = {};
+
+  function pred() {
+    if (!state.predict) return null;
+    var F = state.frames, i = state.idx;
+    if (F[i + 1] && F[i + 1].type === 'push' && F[i + 2] && F[i + 2].type === 'pop' && !state.answered.has(i + 1)) {
+      return { node: F[i + 1].cur, mg: F[i + 1].mg, ans: F[i + 2].cur, added: F[i + 1].added, openBefore: F[i].open.length };
+    }
+    return null;
+  }
+
+  /* ---------- graph ---------- */
+  function svgEl(name, attrs) {
+    var e = document.createElementNS(NS, name);
+    for (var k in attrs) e.setAttribute(k, attrs[k]);
+    return e;
+  }
+  function buildSvg() {
+    var g = state.g, svg = el('svg');
+    svg.innerHTML = '';
+    svg.setAttribute('viewBox', '0 0 ' + g.w + ' ' + g.h);
+    var eg = svgEl('g', {}), ng = svgEl('g', {});
+    edgeEls = {};
+    g.edges.forEach(function (e) {
+      var a = g.pos[e[0]], b = g.pos[e[1]];
+      var dx = b[0] - a[0], dy = b[1] - a[1], d = Math.sqrt(dx * dx + dy * dy), ux = dx / d, uy = dy / d, gap = g.r + 1;
+      var ln = svgEl('line', { class: 'edge', x1: a[0] + ux * gap, y1: a[1] + uy * gap, x2: b[0] - ux * gap, y2: b[1] - uy * gap });
+      eg.appendChild(ln);
+      edgeEls[[e[0], e[1]].sort().join('')] = ln;
+    });
+    g.els = {};
+    g.nodes.forEach(function (n) {
+      var p = g.pos[n], r = g.r;
+      var grp = svgEl('g', { class: 'node', 'data-n': n, transform: 'translate(' + p[0] + ',' + p[1] + ')', role: 'button', 'aria-label': 'Node ' + n });
+      grp.appendChild(svgEl('circle', { class: 'halo', r: r + 8 }));
+      grp.appendChild(svgEl('circle', { class: 'body', r: r }));
+      var t = svgEl('text', { class: 'lt', dy: '0.35em' }); t.textContent = n; grp.appendChild(t);
+      var pb = svgEl('g', { class: 'pb', transform: 'translate(' + (r * 0.85) + ',' + (-r * 0.85) + ')' });
+      pb.appendChild(svgEl('circle', { r: 10 }));
+      var pt = svgEl('text', { dy: '0.35em' }); pb.appendChild(pt); grp.appendChild(pb);
+      var cb = svgEl('g', { class: 'cb', transform: 'translate(' + (r * 0.85) + ',' + (r * 0.85) + ')' });
+      cb.appendChild(svgEl('circle', { r: 10 }));
+      var ct = svgEl('text', { dy: '0.35em' }); cb.appendChild(ct); grp.appendChild(cb);
+      var tag = svgEl('text', { class: 'tag', y: r + 14 }); grp.appendChild(tag);
+      ng.appendChild(grp);
+      g.els[n] = { g: grp, pb: pb, pt: pt, cb: cb, ct: ct, tag: tag };
+    });
+    svg.appendChild(eg); svg.appendChild(ng);
+  }
+
+  function paintGraph(f) {
+    var g = state.g, vis = new Set(f.visits), cnt = {}, ord = {}, pick = !!pred();
+    f.open.forEach(function (o) { cnt[o.n] = (cnt[o.n] || 0) + 1; });
+    if (f.type === 'push') f.added.forEach(function (n, i) { ord[n] = i + 1; });
+    g.nodes.forEach(function (n) {
+      var r = g.els[n], c = r.g.classList;
+      c.toggle('cur', f.cur === n);
+      c.toggle('visited', vis.has(n));
+      c.toggle('open', !!cnt[n]);
+      c.toggle('skipped', f.type === 'skip' && f.cur === n);
+      c.toggle('onpath', !!(f.path && f.path.indexOf(n) >= 0));
+      c.toggle('pickable', pick);
+      if (pick) r.g.setAttribute('tabindex', '0'); else r.g.removeAttribute('tabindex');
+      r.pb.classList.toggle('on', !!ord[n]); r.pt.textContent = ord[n] || '';
+      r.cb.classList.toggle('on', cnt[n] > 1); r.ct.textContent = cnt[n] > 1 ? cnt[n] : '';
+      r.tag.textContent = (n === state.start ? 'START' : '') + (n === state.start && n === state.goal ? ' · ' : '') + (n === state.goal ? 'GOAL' : '');
+    });
+    var hot = {}, path = {};
+    f.hot.forEach(function (e) { hot[[e[0], e[1]].sort().join('')] = 1; });
+    if (f.path) for (var i = 0; i + 1 < f.path.length; i++) path[[f.path[i], f.path[i + 1]].sort().join('')] = 1;
+    Object.keys(edgeEls).forEach(function (k) {
+      edgeEls[k].classList.toggle('hot', !!hot[k]);
+      edgeEls[k].classList.toggle('path', !!path[k]);
+    });
+  }
+
+  /* ---------- code, lists, note ---------- */
+  function buildCode() {
+    var L = pseudo(state.algo, state.closed, !!state.goal, state.start);
+    el('code').innerHTML = L.map(function (l) { return '<li data-id="' + l.id + '"><span style="--lv:' + l.i + '">' + l.t + '</span></li>'; }).join('');
+    codeEls = {};
+    Array.prototype.forEach.call(el('code').children, function (li) { codeEls[li.getAttribute('data-id')] = li; });
+    el('codeSub').textContent = (state.algo === 'dfs' ? 'Depth-first search' : 'Breadth-first search') + (state.closed ? ' with a CLOSED list' : ' with no CLOSED list, adding every neighbour');
+  }
+  function chip(n, cls) {
+    return '<span class="chip ' + (cls || '') + '" data-n="' + n + '"' + (cls && cls.indexOf('pick') >= 0 ? ' role="button" tabindex="0"' : '') + '>' + n + '</span>';
+  }
+  var MAXCHIPS = 48;
+  function paintLists(f) {
+    var dfs = state.algo === 'dfs', picking = !!pred();
+    el('curBox').innerHTML = f.cur ? chip(f.cur, 'cur') : '<span class="empty">none yet</span>';
+    var arr = f.open.map(function (o) { return o.n; });
+    var disp = dfs ? arr.slice().reverse() : arr.slice();
+    var nNew = f.type === 'push' ? f.added.length : 0, total = disp.length, html = '';
+    disp.slice(0, MAXCHIPS).forEach(function (n, i) {
+      var isNew = dfs ? i < nNew : i >= total - nNew;
+      html += chip(n, (i === 0 ? 'next ' : '') + (isNew ? 'new ' : '') + (picking ? 'pick' : ''));
+    });
+    if (total > MAXCHIPS) html += '<span class="chip more">+' + (total - MAXCHIPS) + '</span>';
+    el('open').innerHTML = total ? html : '<span class="empty">empty</span>';
+    el('openH').textContent = 'OPEN (' + total + ')';
+    el('openKind').textContent = dfs ? 'stack: pops and pushes both happen at the left end' : 'queue: pops at the left end, adds at the right end';
+    if (state.closed) el('closed').innerHTML = f.closed.length ? f.closed.map(function (n) { return chip(n, 'done'); }).join('') : '<span class="empty">empty</span>';
+    else el('closed').innerHTML = '<span class="empty">Not kept. Nothing stops a node being visited twice.</span>';
+    var v = f.visits, vh = '';
+    if (v.length > 40) vh += '<span class="chip more">…</span>';
+    v.slice(-40).forEach(function (n, i, a) { vh += chip(n, i === a.length - 1 && f.type === 'visit' ? 'cur' : ''); });
+    el('visits').innerHTML = v.length ? vh : '<span class="empty">none yet</span>';
+  }
+
+  function hintText() {
+    var t = state.algo === 'dfs'
+      ? 'DFS pops the node pushed last. Neighbours are pushed in MoveGen order, so the last one pushed sits on top.'
+      : 'BFS takes the front of OPEN. New neighbours join at the back, so the front only changes when nothing older is waiting.';
+    if (state.closed) t += ' Neighbours already in CLOSED are not added.';
+    return t;
+  }
+  function reason(p) {
+    if (state.algo === 'dfs') return p.added.length ? p.ans + ' was pushed last, so it sits on top.' : 'Nothing new was pushed, so the node already on top is popped.';
+    return p.openBefore > 0 ? p.ans + ' has waited longest at the front of OPEN.' : 'OPEN was empty, so the first neighbour added comes out first.';
+  }
+
+  function paintNote(f) {
+    var last = state.frames.length - 1;
+    el('stepLbl').textContent = 'Step ' + state.idx + ' of ' + last + ' · ' + f.visits.length + ' visit' + (f.visits.length === 1 ? '' : 's');
+    el('score').textContent = state.predict ? 'Predicted ' + state.score.right + ' of ' + state.score.total + ' on the first try' : '';
+    el('noteText').innerHTML = f.note;
+    var p = pred();
+    el('prompt').hidden = !p;
+    if (p) {
+      el('pQ').textContent = 'Which node is popped next, after ' + p.node + ' is expanded?';
+      el('pMG').innerHTML = '<span class="mono" style="margin-right:4px">MoveGen(' + p.node + ') =</span>' + p.mg.map(function (c) { return chip(c); }).join('');
+    }
+    var fb = el('fb');
+    if (state.fb) { fb.hidden = false; fb.className = 'fb ' + state.fb.kind; fb.textContent = state.fb.text; }
+    else { fb.hidden = true; fb.textContent = ''; }
+  }
+
+  function paintCode(f) {
+    Object.keys(codeEls).forEach(function (id) { codeEls[id].classList.toggle('on', f.lines.indexOf(id) >= 0); });
+  }
+
+  function paintBar() {
+    var last = state.frames.length - 1;
+    el('bBack').disabled = state.idx === 0;
+    el('bReset').disabled = state.idx === 0;
+    el('bNext').disabled = state.idx >= last;
+    el('bNext').textContent = pred() ? 'Reveal answer' : 'Next';
+    el('bPlay').textContent = state.play ? 'Pause' : 'Play';
+    el('pos').textContent = state.idx + ' / ' + last;
+  }
+
+  function render() {
+    var f = state.frames[state.idx];
+    paintGraph(f); paintCode(f); paintLists(f); paintNote(f); paintBar();
+  }
+
+  function go(i, fb) { state.idx = i; state.fb = fb || null; render(); }
+
+  /* ---------- transport ---------- */
+  function stopPlay() { if (state.play) { clearInterval(state.play); state.play = null; } }
+  function next() {
+    if (state.idx >= state.frames.length - 1) return;
+    var p = pred();
+    if (p) {
+      state.answered.add(state.idx + 1);
+      state.score.total++;
+      go(state.idx + 1, { kind: 'bad', text: 'Answer: ' + p.ans + '. ' + reason(p) });
+      return;
+    }
+    go(state.idx + 1);
+  }
+  function back() { stopPlay(); if (state.idx > 0) go(state.idx - 1); }
+  function tick() {
+    if (pred() || state.idx >= state.frames.length - 1) { stopPlay(); render(); return; }
+    go(state.idx + 1);
+  }
+  function togglePlay() {
+    if (state.play) { stopPlay(); paintBar(); return; }
+    if (state.idx >= state.frames.length - 1) go(0);
+    if (pred()) { render(); return; }
+    state.play = setInterval(tick, parseInt(el('speed').value, 10));
+    paintBar();
+  }
+  function flash(n) {
+    var node = state.g.els[n]; if (!node) return;
+    node.g.classList.add('wrong');
+    setTimeout(function () { node.g.classList.remove('wrong'); }, 700);
+  }
+  function guess(n) {
+    var p = pred(); if (!p) return;
+    var key = state.idx + 1;
+    if (n === p.ans) {
+      state.answered.add(key);
+      state.score.total++;
+      if (!state.missed.has(key)) state.score.right++;
+      go(state.idx + 1, { kind: 'ok', text: 'Correct. ' + reason(p) });
+    } else {
+      state.missed.add(key);
+      state.fb = { kind: 'bad', text: n + ' is not next. ' + hintText() };
+      flash(n);
+      renderNoteOnly();
+    }
+  }
+  function renderNoteOnly() { paintNote(state.frames[state.idx]); }
+
+  /* ---------- setup ---------- */
+  function fillSelects() {
+    var g = state.g;
+    el('start').innerHTML = g.nodes.map(function (n) { return '<option value="' + n + '">' + n + '</option>'; }).join('');
+    el('goal').innerHTML = '<option value="">None</option>' + g.nodes.map(function (n) { return '<option value="' + n + '">' + n + '</option>'; }).join('');
+  }
+  function syncControls() {
+    el('algoDfs').setAttribute('aria-pressed', state.algo === 'dfs');
+    el('algoBfs').setAttribute('aria-pressed', state.algo === 'bfs');
+    el('closedOn').checked = state.closed;
+    el('predictOn').checked = state.predict;
+    el('order').value = state.order;
+    el('reroll').hidden = state.order !== 'shuffle';
+    el('start').value = state.start;
+    el('goal').value = state.goal;
+    el('mgFixed').setAttribute('aria-pressed', state.fixed);
+    el('mgFree').setAttribute('aria-pressed', !state.fixed);
+    Array.prototype.forEach.call(el('lib').children, function (b) { b.setAttribute('aria-pressed', b.getAttribute('data-id') === state.scn.id); });
+  }
+  function rebuild() {
+    stopPlay();
+    state.frames = simulate(state.g, { algo: state.algo, closed: state.closed, order: state.order, seed: state.seed, start: state.start, goal: state.goal });
+    state.idx = 0; state.fb = null; state.answered = new Set(); state.missed = new Set();
+    buildCode();
+    var capped = state.frames[state.frames.length - 1].type === 'capped';
+    var w = el('warn');
+    w.hidden = !capped;
+    w.textContent = capped ? 'With no CLOSED list the edges run both ways, so each node adds its parent back to OPEN and the search never ends. Only the first ' + state.frames.length + ' steps are shown.' : '';
+    render();
+    runCheck();
+  }
+  function loadScenario(id) {
+    var s = SCENARIOS.filter(function (x) { return x.id === id; })[0];
+    state.scn = s; state.g = buildGraphData(s.graph);
+    state.algo = s.algo; state.closed = s.closed; state.order = s.order; state.start = s.start; state.goal = s.goal;
+    state.score = { right: 0, total: 0 };
+    buildSvg(); fillSelects();
+    el('seq').value = s.sample;
+    syncControls();
+    rebuild();
+  }
+
+  /* ---------- checker ---------- */
+  function chipRow(target, k, okAll, startFixed) {
+    return target.map(function (n, i) {
+      var cls = okAll || i < k ? 'ok' : (i === k ? 'bad' : 'dim');
+      return '<span class="chip ' + cls + '">' + n + '</span>';
+    }).join('');
+  }
+  function runCheck() {
+    var g = state.g, out = el('verdict');
+    var letters = el('seq').value.toUpperCase().replace(/[^A-Z]/g, '').split('').filter(Boolean);
+    if (!letters.length) { out.className = 'verdict'; out.innerHTML = '<span class="sub">Type the visits to test. Letters can be separated by spaces or run together.</span>'; return; }
+    var missing = letters.filter(function (c) { return !g.adj[c]; });
+    if (missing.length) { out.className = 'verdict no'; out.innerHTML = '<span><b>' + missing[0] + '</b> is not a node in this graph.</span>'; return; }
+    if (letters.length > 14) { out.className = 'verdict unk'; out.innerHTML = '<span>Checks are limited to 14 visits. Shorten the sequence.</span>'; return; }
+    var after = el('afterStart').checked;
+    var target = after ? [state.start].concat(letters) : letters;
+    var res = longestPrefix(g, state.algo, state.closed, state.start, target, state.fixed);
+    var algoName = state.algo.toUpperCase();
+    var shown = target.slice(after ? 1 : 0), off = after ? 1 : 0;
+    var chips = '<div class="chips">' + (after ? '<span class="chip ok" title="start">' + state.start + '</span><span class="sub">then</span>' : '') +
+      shown.map(function (n, i) { var gi = i + off; var cls = res.status === 'ok' ? 'ok' : (gi < res.k ? 'ok' : (gi === res.k ? 'bad' : 'dim')); return '<span class="chip ' + cls + '">' + n + '</span>'; }).join('') + '</div>';
+    var why = '';
+    if (state.algo === 'dfs' && !state.closed) {
+      why = state.fixed
+        ? 'With no CLOSED list, every node pushes all its neighbours, including the one it came from, so each visit is a neighbour of the previous one. A MoveGen that repeats its order also repeats its choice whenever the search returns to a node, so the walk soon alternates between two neighbouring nodes.'
+        : 'With no CLOSED list, every node pushes all its neighbours, including the one it came from, so each visit is a neighbour of the previous one. If MoveGen may answer differently each call, any such walk can happen.';
+    }
+    if (res.status === 'ok') {
+      out.className = 'verdict ok';
+      out.innerHTML = '<span><b>Possible.</b> Some MoveGen ' + (state.fixed ? 'ordering, fixed for every node,' : 'behaviour') + ' makes ' + algoName + ' visit exactly this order.</span>' + chips + (why ? '<span class="sub">' + why + '</span>' : '');
+    } else if (res.status === 'unknown') {
+      out.className = 'verdict unk';
+      out.innerHTML = '<span><b>Too many cases to decide.</b> Try a shorter sequence.</span>' + chips;
+    } else {
+      var bad = target[res.k], prev = target[res.k - 1], msg;
+      if (res.k === 0) msg = 'The search starts at ' + state.start + ', so the first visit has to be ' + state.start + '.';
+      else {
+        msg = 'The order holds up to ' + prev + ', but ' + bad + ' cannot be visited next.';
+        if (state.algo === 'dfs' && !state.closed) {
+          msg += g.adj[prev].indexOf(bad) < 0 ? ' ' + prev + ' and ' + bad + ' are not neighbours.' : ' ' + bad + ' is a neighbour of ' + prev + ', but a MoveGen that repeats its order would have made a different choice here.';
+        }
+      }
+      out.className = 'verdict no';
+      out.innerHTML = '<span><b>Not possible.</b> ' + msg + '</span>' + chips + (why ? '<span class="sub">' + why + '</span>' : '');
+    }
+  }
+
+  /* ---------- events ---------- */
+  function init() {
+    el('lib').innerHTML = SCENARIOS.map(function (s) { return '<button type="button" class="card" data-id="' + s.id + '" aria-pressed="false"><b>' + s.name + '</b><span>' + s.blurb + '</span></button>'; }).join('');
+    el('lib').addEventListener('click', function (e) { var b = e.target.closest('.card'); if (b) loadScenario(b.getAttribute('data-id')); });
+    el('algoDfs').addEventListener('click', function () { state.algo = 'dfs'; syncControls(); rebuild(); });
+    el('algoBfs').addEventListener('click', function () { state.algo = 'bfs'; syncControls(); rebuild(); });
+    el('closedOn').addEventListener('change', function (e) { state.closed = e.target.checked; rebuild(); });
+    el('predictOn').addEventListener('change', function (e) { state.predict = e.target.checked; state.fb = null; stopPlay(); render(); });
+    el('order').addEventListener('change', function (e) { state.order = e.target.value; el('reroll').hidden = state.order !== 'shuffle'; rebuild(); });
+    el('reroll').addEventListener('click', function () { state.seed = state.seed + 1; rebuild(); });
+    el('start').addEventListener('change', function (e) { state.start = e.target.value; rebuild(); });
+    el('goal').addEventListener('change', function (e) { state.goal = e.target.value; rebuild(); });
+    el('bReset').addEventListener('click', function () { stopPlay(); go(0); });
+    el('bBack').addEventListener('click', back);
+    el('bNext').addEventListener('click', function () { stopPlay(); next(); });
+    el('bPlay').addEventListener('click', togglePlay);
+    el('speed').addEventListener('change', function () { if (state.play) { stopPlay(); togglePlay(); } });
+    el('seq').addEventListener('input', runCheck);
+    el('afterStart').addEventListener('change', runCheck);
+    el('mgFixed').addEventListener('click', function () { state.fixed = true; syncControls(); runCheck(); });
+    el('mgFree').addEventListener('click', function () { state.fixed = false; syncControls(); runCheck(); });
+    el('svg').addEventListener('click', function (e) { var n = e.target.closest('.node'); if (n) guess(n.getAttribute('data-n')); });
+    el('svg').addEventListener('keydown', function (e) {
+      var n = e.target.closest && e.target.closest('.node');
+      if (n && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); guess(n.getAttribute('data-n')); }
+    });
+    el('open').addEventListener('click', function (e) { var c = e.target.closest('.chip.pick'); if (c) guess(c.getAttribute('data-n')); });
+    el('open').addEventListener('keydown', function (e) {
+      var c = e.target.closest && e.target.closest('.chip.pick');
+      if (c && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); guess(c.getAttribute('data-n')); }
+    });
+    document.addEventListener('keydown', function (e) {
+      var t = e.target, tag = t && t.tagName;
+      if (tag === 'INPUT' || tag === 'SELECT' || tag === 'TEXTAREA' || (t && t.getAttribute && t.getAttribute('role') === 'button')) return;
+      if (e.key === 'ArrowRight') { e.preventDefault(); stopPlay(); next(); }
+      else if (e.key === 'ArrowLeft') { e.preventDefault(); back(); }
+    });
+    loadScenario('tree7');
+  }
+  init();
+})();
+</script>
